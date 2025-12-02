@@ -37,19 +37,26 @@ async function withRetry<T>(operation: () => Promise<T>, retries = 2, baseDelay 
   throw lastError;
 }
 
-// Utility to reliably extract JSON from potential markdown text
+// Utility to reliably extract JSON from potential markdown text or malformed AI output
 function extractJSON(text: string): any {
   if (!text) throw new Error("Empty response from AI");
 
+  // PRE-PROCESSING: Fix the specific "1.00000..." infinite float bug
+  // This replaces "verse": 1.00000... with "verse": 1
+  let sanitizedText = text.replace(/"verse"\s*:\s*(\d+)\.0+/g, '"verse": $1');
+  
+  // Also remove huge numbers that might break JSON (e.g. infinite repeating digits)
+  sanitizedText = sanitizedText.replace(/:\s*(\d{15,})/g, ': $1'); 
+
   // 1. Try direct parse first
   try {
-    return JSON.parse(text);
+    return JSON.parse(sanitizedText);
   } catch (e) {
-    // Continue to other methods
+    // Continue
   }
 
   // 2. Remove Markdown code blocks (```json ... ```)
-  let cleaned = text.replace(/```json\s*|```/g, '').trim();
+  let cleaned = sanitizedText.replace(/```json\s*|```/g, '').trim();
   try {
     return JSON.parse(cleaned);
   } catch (e) {
@@ -57,11 +64,11 @@ function extractJSON(text: string): any {
   }
 
   // 3. Extract purely by brace finding (Find largest outer object)
-  const firstBrace = text.indexOf('{');
-  const lastBrace = text.lastIndexOf('}');
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
   
   if (firstBrace !== -1 && lastBrace !== -1) {
-    const candidate = text.substring(firstBrace, lastBrace + 1);
+    const candidate = cleaned.substring(firstBrace, lastBrace + 1);
     try {
       return JSON.parse(candidate);
     } catch (e) {
@@ -78,10 +85,10 @@ function extractJSON(text: string): any {
   }
 
   // 5. Fallback: Check if it's an array wrapped in text
-  const firstBracket = text.indexOf('[');
-  const lastBracket = text.lastIndexOf(']');
+  const firstBracket = cleaned.indexOf('[');
+  const lastBracket = cleaned.lastIndexOf(']');
   if (firstBracket !== -1 && lastBracket !== -1) {
-     const candidate = text.substring(firstBracket, lastBracket + 1);
+     const candidate = cleaned.substring(firstBracket, lastBracket + 1);
      try {
          const arr = JSON.parse(candidate);
          return { verses: arr }; // Wrap in expected structure
@@ -89,15 +96,17 @@ function extractJSON(text: string): any {
   }
 
   // 6. Last resort: Regex extraction for verse objects
+  // This ignores the JSON structure and just grabs values
   try {
     const verses: any[] = [];
-    const regex = /"verse"\s*:\s*"?(\d+)"?\s*,\s*"text"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+    // Regex matches: "verse": 123 (or "123"), "text": "content"
+    const regex = /"verse"\s*:\s*"?(\d+)(\.0+)?"?\s*,\s*"text"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
     
     let match;
-    while ((match = regex.exec(text)) !== null) {
+    while ((match = regex.exec(sanitizedText)) !== null) {
       verses.push({
         verse: parseInt(match[1], 10),
-        text: match[2]
+        text: match[3] // Group 3 is the text content
       });
     }
     
@@ -152,7 +161,7 @@ export const getChapterContent = async (bookNameEng: string, bookNameChi: string
         重要規則：
         1. 必須嚴格輸出 JSON 格式。
         2. 不要使用 Markdown 代碼塊。
-        3. "verse" 欄位必須是簡單的整數 (例如: 1, 2, 3)，不要使用長編號。
+        3. "verse" 欄位必須是簡單的「整數」(例如: 1, 2, 3)，絕不可使用小數點 (例如 1.0) 或科學記號。
         4. "text" 欄位為經文內容，不要包含節號。
         
         期望格式：
@@ -179,7 +188,7 @@ export const getChapterContent = async (bookNameEng: string, bookNameChi: string
                 items: {
                   type: Type.OBJECT,
                   properties: {
-                    verse: { type: Type.NUMBER, description: "Verse number (integer, e.g. 1)" },
+                    verse: { type: Type.INTEGER, description: "Verse number (Integer ONLY, no decimals)" },
                     text: { type: Type.STRING }
                   }
                 }
@@ -194,7 +203,7 @@ export const getChapterContent = async (bookNameEng: string, bookNameChi: string
 
       if (Array.isArray(resultVerses) && resultVerses.length > 0) {
         const typedVerses = resultVerses.map((v: any) => ({
-             verse: Number(v.verse),
+             verse: Math.floor(Number(v.verse)), // Force integer
              text: String(v.text).replace(/\s+/g, '') 
         })).filter((v: Verse) => !isNaN(v.verse) && v.text);
 
