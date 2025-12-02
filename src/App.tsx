@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Book as BookIcon, Search, ChevronRight, Menu, X, BookOpen, Loader2, AlertCircle, ChevronLeft, Settings, Upload, Database, CheckCircle, Download, ExternalLink, Save, Github, FileJson, ChevronDown, Grid, Activity } from 'lucide-react';
+import { Book as BookIcon, Search, ChevronRight, Menu, X, BookOpen, Loader2, AlertCircle, ChevronLeft, Settings, Upload, Database, CheckCircle, Download, ExternalLink, Save, Github, FileJson, ChevronDown, Grid, Activity, Clock } from 'lucide-react';
 import { ALL_BOOKS, OLD_TESTAMENT, NEW_TESTAMENT } from './constants';
 import { Book, ChapterData, Verse, SearchResult } from './types';
 import VoiceAssistant from './components/VoiceAssistant';
@@ -417,6 +417,9 @@ const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => vo
     const [dbCount, setDbCount] = useState(0);
     const [diagResult, setDiagResult] = useState<any>(null);
     const [diagLoading, setDiagLoading] = useState(false);
+    
+    // Build Timestamp for debugging Vercel deployments
+    const buildTime = new Date().toLocaleString('zh-TW');
 
     const refreshCount = async () => {
         try {
@@ -598,7 +601,7 @@ const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => vo
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-gray-400">Key Masked:</span>
-                                    <span>{diagResult.keyMasked}</span>
+                                    <span className="text-yellow-400">{diagResult.keyMasked}</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-gray-400">Connection:</span>
@@ -613,6 +616,12 @@ const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => vo
                                 )}
                             </div>
                         )}
+                        
+                        {/* Build Time Indicator */}
+                        <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-2 text-[10px] text-gray-400">
+                             <Clock size={10} />
+                             <span>Build Time: {buildTime}</span>
+                        </div>
                     </div>
                 </div>
 

@@ -24,12 +24,12 @@ async function withRetry<T>(operation: () => Promise<T>, retries = 2, baseDelay 
 
       // Handle Expired Key specifically
       if (errorMessage.includes('expired')) {
-        throw new Error("API Key 已過期 (Expired)。請前往 Google AI Studio 重新申請新的金鑰，並更新設定。");
+        throw new Error("API Key 已過期 (Expired)。請前往 Google AI Studio 申請新金鑰，並在 Vercel 重新部署 (Redeploy)。");
       }
 
       // Handle Leaked/Blocked Key (403)
       if (errorMessage.includes('leaked') || errorMessage.includes('403') || errorStatus === 'PERMISSION_DENIED') {
-         throw new Error("API Key 已被 Google 封鎖 (偵測到外洩)。請前往 Google AI Studio 重新申請新的金鑰，並更新 Vercel 環境變數。");
+         throw new Error("API Key 已被 Google 封鎖 (偵測到外洩)。請更換金鑰並重新部署。");
       }
 
       // If it's a 429 (Quota Exceeded), do not retry, fail immediately with specific message
@@ -39,7 +39,7 @@ async function withRetry<T>(operation: () => Promise<T>, retries = 2, baseDelay 
       
       // Handle missing key error specifically
       if (API_KEY === 'MISSING_KEY' || errorMessage.includes('API key') || errorMessage.includes('400') || errorStatus === 'INVALID_ARGUMENT') {
-         throw new Error("API Key 無效或未設定。請檢查 Vercel 環境變數 VITE_API_KEY 是否正確並已重新部署。");
+         throw new Error("API Key 無效。請檢查 Vercel 環境變數 VITE_API_KEY 是否正確，並務必執行 Redeploy。");
       }
 
       console.warn(`Attempt ${i + 1} failed:`, errorMessage);
@@ -284,15 +284,22 @@ export const searchBible = async (query: string): Promise<SearchResult[]> => {
  * Diagnostic tool to check API key and connection status
  */
 export const diagnoseConnection = async () => {
+    const key = API_KEY;
+    const isConfigured = key !== 'MISSING_KEY';
+    // Show last 6 chars to differentiate old vs new keys
+    const masked = isConfigured && key.length > 10 
+        ? `${key.substring(0, 8)}...${key.substring(key.length - 6)}` 
+        : (isConfigured ? 'Too Short' : 'N/A');
+
     const status = {
-        keyConfigured: API_KEY !== 'MISSING_KEY',
-        keyMasked: API_KEY !== 'MISSING_KEY' ? `${API_KEY.substring(0, 8)}...${API_KEY.substring(API_KEY.length - 4)}` : 'N/A',
+        keyConfigured: isConfigured,
+        keyMasked: masked,
         connection: 'pending',
         error: null as string | null
     };
 
     try {
-        if (!status.keyConfigured) throw new Error("API Key is missing in environment variables.");
+        if (!status.keyConfigured) throw new Error("API Key 未設定。請在本機建立 .env 檔案，或檢查 Vercel 環境變數 VITE_API_KEY。");
         
         await ai.models.generateContent({
             model: 'gemini-2.5-flash',
@@ -304,13 +311,13 @@ export const diagnoseConnection = async () => {
         const msg = e.message || '';
         // Pretty print error for UI
         if (msg.includes('expired')) {
-             status.error = "API Key 已過期 (Expired)。請更換新金鑰。";
+             status.error = "Key 已過期 (Expired)。請產生新 Key 並在 Vercel 重新部署。";
         } else if (msg.includes('leaked')) {
-             status.error = "API Key 已被封鎖 (外洩)。請更換新金鑰。";
+             status.error = "Key 已被封鎖 (外洩)。請產生新 Key 並在 Vercel 重新部署。";
         } else if (e.status === 'PERMISSION_DENIED' || msg.includes('403')) {
-             status.error = "權限被拒 (403)。金鑰可能被封鎖或過期。";
+             status.error = "權限被拒 (403)。金鑰可能被封鎖。";
         } else if (e.status === 'INVALID_ARGUMENT' || msg.includes('400')) {
-             status.error = "API Key 無效 (400)。請檢查設定。";
+             status.error = "Key 無效 (400)。Vercel 環境變數未更新？請 Redeploy。";
         } else if (e.status === 'RESOURCE_EXHAUSTED' || msg.includes('429')) {
              status.error = "配額已滿 (429)。";
         } else {
