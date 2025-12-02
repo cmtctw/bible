@@ -39,12 +39,13 @@ async function withRetry<T>(operation: () => Promise<T>, retries = 2, baseDelay 
 }
 
 // Utility to reliably extract JSON from potential markdown text or malformed AI output
-function extractJSON(text: string): any {
+function extractJSON(text: string, mode: 'verses' | 'search' = 'verses'): any {
   if (!text) throw new Error("Empty response from AI");
 
   // PRE-PROCESSING: Fix the specific "1.00000..." infinite float bug
   // This replaces "verse": 1.00000... with "verse": 1
   let sanitizedText = text.replace(/"verse"\s*:\s*(\d+)\.0+/g, '"verse": $1');
+  sanitizedText = sanitizedText.replace(/"chapter"\s*:\s*(\d+)\.0+/g, '"chapter": $1');
   
   // Also remove huge numbers that might break JSON (e.g. infinite repeating digits)
   sanitizedText = sanitizedText.replace(/:\s*(\d{15,})/g, ': $1'); 
@@ -85,36 +86,38 @@ function extractJSON(text: string): any {
     }
   }
 
-  // 5. Fallback: Check if it's an array wrapped in text
+  // 5. Fallback: Check if it's an array wrapped in text (Specific for verses)
   const firstBracket = cleaned.indexOf('[');
   const lastBracket = cleaned.lastIndexOf(']');
   if (firstBracket !== -1 && lastBracket !== -1) {
      const candidate = cleaned.substring(firstBracket, lastBracket + 1);
      try {
          const arr = JSON.parse(candidate);
-         return { verses: arr }; // Wrap in expected structure
+         return mode === 'verses' ? { verses: arr } : { results: arr }; 
      } catch (e) {}
   }
 
-  // 6. Last resort: Regex extraction for verse objects
-  try {
-    const verses: any[] = [];
-    const regex = /"verse"\s*:\s*"?(\d+)(\.0+)?"?\s*,\s*"text"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
-    
-    let match;
-    while ((match = regex.exec(sanitizedText)) !== null) {
-      verses.push({
-        verse: parseInt(match[1], 10),
-        text: match[3]
-      });
-    }
-    
-    if (verses.length > 0) {
-      verses.sort((a, b) => a.verse - b.verse);
-      return { verses };
-    }
-  } catch (e) {
-    console.warn("Regex fallback failed", e);
+  // 6. Last resort: Regex extraction (Only for verses mode to avoid messing up complex search objects)
+  if (mode === 'verses') {
+      try {
+        const verses: any[] = [];
+        const regex = /"verse"\s*:\s*"?(\d+)(\.0+)?"?\s*,\s*"text"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+        
+        let match;
+        while ((match = regex.exec(sanitizedText)) !== null) {
+          verses.push({
+            verse: parseInt(match[1], 10),
+            text: match[3]
+          });
+        }
+        
+        if (verses.length > 0) {
+          verses.sort((a, b) => a.verse - b.verse);
+          return { verses };
+        }
+      } catch (e) {
+        console.warn("Regex fallback failed", e);
+      }
   }
 
   console.error("Failed to parse JSON content:", text.substring(0, 200) + "...");
@@ -182,7 +185,7 @@ export const getChapterContent = async (bookNameEng: string, bookNameChi: string
         }
       });
 
-      const data = extractJSON(response.text || "{}");
+      const data = extractJSON(response.text || "{}", 'verses');
       const resultVerses = data.verses || data.data || (Array.isArray(data) ? data : []);
 
       if (Array.isArray(resultVerses) && resultVerses.length > 0) {
@@ -238,7 +241,7 @@ export const searchBible = async (query: string): Promise<SearchResult[]> => {
         model: 'gemini-2.5-flash',
         contents: `Search CUV Bible for: "${query}". Return top 10 most relevant verses.
         Strict JSON format rules:
-        1. "bookId": standard 3-letter lowercase bible book code (e.g. "gen", "exo", "mat", "rev"). THIS IS IMPORTANT.
+        1. "bookId": standard 3-letter lowercase bible book code (e.g. "gen", "exo", "mat", "rev"). THIS IS CRITICAL.
         2. "bookName": Traditional Chinese Book Name.
         3. "chapter": Integer.
         4. "verse": Integer.
@@ -257,7 +260,7 @@ export const searchBible = async (query: string): Promise<SearchResult[]> => {
         }
       });
 
-      const data = extractJSON(response.text || "{}");
+      const data = extractJSON(response.text || "{}", 'search');
       return data.results || [];
     } catch (error: any) {
       console.error("Search error:", error);
@@ -267,4 +270,30 @@ export const searchBible = async (query: string): Promise<SearchResult[]> => {
       throw error; // Rethrow so UI can show the specific error (e.g. Invalid Key)
     }
   });
+};
+
+/**
+ * Diagnostic tool to check API key and connection status
+ */
+export const diagnoseConnection = async () => {
+    const status = {
+        keyConfigured: API_KEY !== 'MISSING_KEY',
+        keyMasked: API_KEY !== 'MISSING_KEY' ? `${API_KEY.substring(0, 8)}...${API_KEY.substring(API_KEY.length - 4)}` : 'N/A',
+        connection: 'pending',
+        error: null as string | null
+    };
+
+    try {
+        if (!status.keyConfigured) throw new Error("API Key is missing in environment variables.");
+        
+        await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: 'Hi',
+        });
+        status.connection = 'success';
+    } catch (e: any) {
+        status.connection = 'failed';
+        status.error = e.message || 'Unknown error';
+    }
+    return status;
 };

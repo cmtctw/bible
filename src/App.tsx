@@ -1,10 +1,10 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Book as BookIcon, Search, ChevronRight, Menu, X, BookOpen, Loader2, AlertCircle, ChevronLeft, Settings, Upload, Database, CheckCircle, Download, ExternalLink, Save, Github, FileJson, ChevronDown, Grid } from 'lucide-react';
+import { Book as BookIcon, Search, ChevronRight, Menu, X, BookOpen, Loader2, AlertCircle, ChevronLeft, Settings, Upload, Database, CheckCircle, Download, ExternalLink, Save, Github, FileJson, ChevronDown, Grid, Activity } from 'lucide-react';
 import { ALL_BOOKS, OLD_TESTAMENT, NEW_TESTAMENT } from './constants';
 import { Book, ChapterData, Verse, SearchResult } from './types';
 import VoiceAssistant from './components/VoiceAssistant';
-import { getChapterContent, searchBible } from './services/bibleService';
+import { getChapterContent, searchBible, diagnoseConnection } from './services/bibleService';
 import { bibleDb } from './services/bibleDb';
 
 // -- Sub Components --
@@ -173,7 +173,7 @@ const ChapterView = ({
   const isQuotaError = error && (error.includes('Quota') || error.includes('配額'));
 
   return (
-    <div className="w-[80%] max-w-[1600px] mx-auto px-6 py-8 animate-fade-in font-sans">
+    <div className="w-[80%] max-w-7xl mx-auto px-6 py-8 animate-fade-in font-sans">
       <div className="flex flex-col md:flex-row items-center justify-between mb-8 border-b border-bible-accent pb-4 gap-4 sticky top-0 bg-[#fdfbf7]/95 backdrop-blur-sm z-10 p-2">
         <h2 className="text-3xl font-bold text-bible-text">{book.name}</h2>
         
@@ -279,7 +279,7 @@ const ChapterView = ({
         <div className="flex flex-col items-center justify-center py-20 text-bible-red text-center px-4">
           <AlertCircle className="w-12 h-12 mb-4" />
           <p className="font-bold text-xl mb-2">載入失敗</p>
-          <p className="text-base opacity-80 mb-6 max-w-md leading-relaxed">{error}</p>
+          <p className="text-base opacity-80 mb-6 max-w-md leading-relaxed break-words">{error}</p>
           <div className="flex gap-4">
             <button 
                 onClick={() => window.location.reload()} 
@@ -334,9 +334,6 @@ const SearchView = ({
       try {
         const data = await searchBible(query);
         setResults(data);
-        if (data.length === 0) {
-            // No results found logic
-        }
       } catch (err: any) {
          setError(err.message || "搜尋失敗");
       } finally {
@@ -350,7 +347,7 @@ const SearchView = ({
   const isQuotaError = error && (error.includes('Quota') || error.includes('配額'));
 
   return (
-    <div className="w-[80%] max-w-[1600px] mx-auto px-6 py-8 font-sans">
+    <div className="w-[80%] max-w-7xl mx-auto px-6 py-8 font-sans">
       <h2 className="text-2xl font-bold text-bible-text mb-6 flex items-center gap-2">
         <Search className="w-6 h-6 text-bible-gold" />
         搜尋結果："{query}"
@@ -365,7 +362,7 @@ const SearchView = ({
         <div className="flex flex-col items-center justify-center py-20 text-bible-red text-center px-4">
             <AlertCircle className="w-12 h-12 mb-4" />
             <p className="font-bold text-xl mb-2">搜尋發生錯誤</p>
-            <p className="text-base opacity-80 mb-6 max-w-md leading-relaxed">{error}</p>
+            <p className="text-base opacity-80 mb-6 max-w-md leading-relaxed break-words">{error}</p>
         </div>
       ) : results.length === 0 ? (
         <div className="text-center py-20 text-gray-500">
@@ -418,6 +415,8 @@ const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => vo
     const [importStatus, setImportStatus] = useState<'idle' | 'importing' | 'success' | 'error'>('idle');
     const [message, setMessage] = useState('');
     const [dbCount, setDbCount] = useState(0);
+    const [diagResult, setDiagResult] = useState<any>(null);
+    const [diagLoading, setDiagLoading] = useState(false);
 
     const refreshCount = async () => {
         try {
@@ -428,11 +427,25 @@ const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => vo
         }
     };
 
+    const runDiagnosis = async () => {
+        setDiagLoading(true);
+        setDiagResult(null);
+        try {
+            const result = await diagnoseConnection();
+            setDiagResult(result);
+        } catch (e) {
+            setDiagResult({ error: 'Diagnosis failed' });
+        } finally {
+            setDiagLoading(false);
+        }
+    };
+
     useEffect(() => {
         if (isOpen) {
             refreshCount();
             setImportStatus('idle');
             setMessage('');
+            setDiagResult(null);
         }
     }, [isOpen]);
 
@@ -480,96 +493,124 @@ const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => vo
                 <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-bible-paper shrink-0">
                     <h3 className="font-bold text-lg flex items-center gap-2">
                         <Database className="w-5 h-5 text-bible-gold" />
-                        離線資料庫設定
+                        設定
                     </h3>
                     <button onClick={onClose} className="p-1 hover:bg-gray-200 rounded-full"><X size={20} /></button>
                 </div>
                 
-                <div className="p-6 overflow-y-auto">
-                    {/* Status Card */}
-                    <div className="bg-gray-50 rounded-xl p-4 mb-6 border border-gray-100">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-bold text-gray-500">目前狀態</span>
-                            <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${dbCount > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'}`}>
-                                {dbCount > 0 ? '已啟用' : '未啟用'}
-                            </span>
+                <div className="p-6 overflow-y-auto space-y-8">
+                    
+                    {/* Offline DB Section */}
+                    <div>
+                        <h4 className="font-bold text-bible-text mb-4 flex items-center gap-2">
+                             <Database size={18} />
+                             離線資料庫
+                        </h4>
+                        
+                        {/* Status Card */}
+                        <div className="bg-gray-50 rounded-xl p-4 mb-6 border border-gray-100">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm font-bold text-gray-500">資料庫狀態</span>
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${dbCount > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'}`}>
+                                    {dbCount > 0 ? '已啟用' : '未啟用'}
+                                </span>
+                            </div>
+                            <div className="flex items-end gap-2">
+                                <span className="text-3xl font-bold text-bible-text">{dbCount}</span>
+                                <span className="text-sm text-gray-400 mb-1.5 font-medium">章節</span>
+                            </div>
                         </div>
-                        <div className="flex items-end gap-2">
-                            <span className="text-3xl font-bold text-bible-text">{dbCount}</span>
-                            <span className="text-sm text-gray-400 mb-1.5 font-medium">已快取章節</span>
-                        </div>
-                    </div>
 
-                    <div className="space-y-6">
-                        <div>
-                            <h4 className="font-bold text-bible-text mb-2 text-sm">步驟 1：下載聖經 JSON</h4>
-                            <p className="text-xs text-gray-500 mb-3 bg-yellow-50 p-2 rounded border border-yellow-100 leading-relaxed font-medium">
-                                <span className="font-bold text-yellow-700">更新：</span> 
-                                請點擊下方按鈕前往 GitHub 頁面，並下載 <strong>zh_cuv.json</strong> (和合本)。<br/>
-                                <span className="opacity-70">請選擇 zh_cuv.json (和合本)，不要下載 zh_ncv (新譯本)。</span>
-                            </p>
-                            
-                            <div className="grid grid-cols-1 gap-3">
+                        <div className="space-y-4">
+                            <div>
+                                <p className="text-xs text-gray-500 mb-3 bg-yellow-50 p-2 rounded border border-yellow-100 leading-relaxed font-medium">
+                                    <span className="font-bold text-yellow-700">下載說明：</span> 
+                                    請點擊下方按鈕前往 GitHub，下載 <strong>zh_cuv.json</strong> (和合本)。
+                                </p>
+                                
                                 <a 
                                     href="https://github.com/thiagobodruk/bible/blob/master/json/zh_cuv.json" 
                                     target="_blank" 
                                     rel="noopener noreferrer" 
                                     className="flex items-center gap-3 p-3 border border-bible-gold bg-bible-paper/30 text-bible-text rounded-lg hover:bg-bible-gold hover:text-white transition-all text-sm font-bold group"
                                 >
-                                    <div className="p-2 bg-white rounded-full text-bible-gold group-hover:text-bible-text">
-                                      <Github size={20} />
-                                    </div>
-                                    <div className="flex flex-col text-left">
-                                      <span>開啟 GitHub 下載頁面</span>
-                                      <span className="text-[10px] opacity-70 font-normal">請選擇 zh_cuv.json</span>
-                                    </div>
+                                    <Github size={20} />
+                                    <span>前往下載 zh_cuv.json</span>
                                     <ExternalLink size={16} className="ml-auto opacity-50" />
                                 </a>
                             </div>
-                        </div>
 
-                        <div>
-                            <h4 className="font-bold text-bible-text mb-1 text-sm">步驟 2：匯入檔案</h4>
-                            <p className="text-xs text-gray-500 mb-3 font-medium">請選擇您剛剛下載的 .json 檔案。</p>
-                            
-                            <div className={`
-                                border-2 border-dashed rounded-xl p-6 text-center transition-colors relative
-                                ${importStatus === 'error' ? 'border-red-300 bg-red-50' : 'border-bible-accent hover:bg-bible-paper/50'}
-                            `}>
-                                <input 
-                                    type="file" 
-                                    accept=".json" 
-                                    onChange={handleFileUpload}
-                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                    disabled={importStatus === 'importing'}
-                                />
-                                <div className="flex flex-col items-center gap-2">
-                                    {importStatus === 'importing' ? (
-                                        <Loader2 className="w-8 h-8 text-bible-gold animate-spin" />
-                                    ) : importStatus === 'success' ? (
-                                        <CheckCircle className="w-8 h-8 text-green-500" />
-                                    ) : importStatus === 'error' ? (
-                                        <AlertCircle className="w-8 h-8 text-red-500" />
-                                    ) : (
-                                        <Upload className="w-8 h-8 text-gray-400" />
-                                    )}
-                                    <span className={`font-bold text-sm ${importStatus === 'error' ? 'text-red-600' : 'text-gray-600'}`}>
-                                        {importStatus === 'importing' ? '處理中...' : 
-                                        importStatus === 'success' ? '匯入完成' : 
-                                        importStatus === 'error' ? '格式錯誤，請重試' :
-                                        '點擊選擇 JSON 檔案'}
-                                    </span>
+                            <div>
+                                <div className={`
+                                    border-2 border-dashed rounded-xl p-6 text-center transition-colors relative
+                                    ${importStatus === 'error' ? 'border-red-300 bg-red-50' : 'border-bible-accent hover:bg-bible-paper/50'}
+                                `}>
+                                    <input 
+                                        type="file" 
+                                        accept=".json" 
+                                        onChange={handleFileUpload}
+                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                        disabled={importStatus === 'importing'}
+                                    />
+                                    <div className="flex flex-col items-center gap-2">
+                                        {importStatus === 'importing' ? (
+                                            <Loader2 className="w-8 h-8 text-bible-gold animate-spin" />
+                                        ) : importStatus === 'success' ? (
+                                            <CheckCircle className="w-8 h-8 text-green-500" />
+                                        ) : importStatus === 'error' ? (
+                                            <AlertCircle className="w-8 h-8 text-red-500" />
+                                        ) : (
+                                            <Upload className="w-8 h-8 text-gray-400" />
+                                        )}
+                                        <span className={`font-bold text-sm ${importStatus === 'error' ? 'text-red-600' : 'text-gray-600'}`}>
+                                            {importStatus === 'importing' ? '匯入中...' : 
+                                            importStatus === 'success' ? '匯入完成' : 
+                                            importStatus === 'error' ? '格式錯誤' :
+                                            '上傳 JSON 檔案'}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
+                    </div>
+                    
+                    {/* Diagnostics Section */}
+                    <div className="pt-6 border-t border-gray-100">
+                        <h4 className="font-bold text-bible-text mb-4 flex items-center gap-2">
+                             <Activity size={18} />
+                             系統診斷
+                        </h4>
+                        <button 
+                            onClick={runDiagnosis}
+                            disabled={diagLoading}
+                            className="w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-bold transition-colors mb-4 disabled:opacity-50"
+                        >
+                            {diagLoading ? '診斷中...' : '執行連線檢查'}
+                        </button>
 
-                        {message && (
-                            <div className={`p-3 rounded-lg text-xs text-center break-words font-medium ${
-                                importStatus === 'success' ? 'bg-green-50 text-green-700 border border-green-100' : 
-                                importStatus === 'error' ? 'bg-red-50 text-red-600 border border-red-100' : 
-                                'bg-gray-50 text-gray-600'
-                            }`}>
-                                {message}
+                        {diagResult && (
+                            <div className="bg-gray-900 text-gray-100 p-3 rounded-lg text-xs font-mono space-y-2">
+                                <div className="flex justify-between">
+                                    <span className="text-gray-400">API Key Configured:</span>
+                                    <span className={diagResult.keyConfigured ? 'text-green-400' : 'text-red-400'}>
+                                        {diagResult.keyConfigured ? 'YES' : 'NO'}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-gray-400">Key Masked:</span>
+                                    <span>{diagResult.keyMasked}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-gray-400">Connection:</span>
+                                    <span className={diagResult.connection === 'success' ? 'text-green-400' : 'text-red-400'}>
+                                        {diagResult.connection.toUpperCase()}
+                                    </span>
+                                </div>
+                                {diagResult.error && (
+                                    <div className="text-red-300 border-t border-gray-700 pt-2 mt-2 break-all">
+                                        Error: {diagResult.error}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -580,7 +621,7 @@ const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => vo
                         onClick={onClose}
                         className="px-6 py-2 bg-bible-text text-white rounded-lg hover:bg-gray-800 transition-colors font-bold text-sm"
                     >
-                        完成
+                        關閉
                     </button>
                 </div>
             </div>
