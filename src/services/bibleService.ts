@@ -253,7 +253,7 @@ export const searchBible = async (query: string): Promise<SearchResult[]> => {
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: `Search CUV Bible for: "${query}". Return top 10 verses.
-        Strict JSON format: { "results": [{ "book": "BookName", "chapter": 1, "verse": 1, "text": "Verse content" }] }`,
+        Strict JSON format: { "results": [{ "book": "BookName (Must be Traditional Chinese, e.g. 創世記)", "chapter": 1, "verse": 1, "text": "Verse content" }] }`,
         config: {
           responseMimeType: 'application/json',
           safetySettings: [

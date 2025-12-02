@@ -173,7 +173,7 @@ const ChapterView = ({
   const isQuotaError = error && (error.includes('Quota') || error.includes('配額'));
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8 animate-fade-in font-sans">
+    <div className="w-[80%] max-w-[1600px] mx-auto px-6 py-8 animate-fade-in font-sans">
       <div className="flex flex-col md:flex-row items-center justify-between mb-8 border-b border-bible-accent pb-4 gap-4 sticky top-0 bg-[#fdfbf7]/95 backdrop-blur-sm z-10 p-2">
         <h2 className="text-3xl font-bold text-bible-text">{book.name}</h2>
         
@@ -340,7 +340,7 @@ const SearchView = ({
   }, [query]);
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8 font-sans">
+    <div className="w-[80%] max-w-[1600px] mx-auto px-6 py-8 font-sans">
       <h2 className="text-2xl font-bold text-bible-text mb-6 flex items-center gap-2">
         <Search className="w-6 h-6 text-bible-gold" />
         搜尋結果："{query}"
@@ -361,7 +361,12 @@ const SearchView = ({
             <div 
               key={idx} 
               onClick={() => {
-                const book = ALL_BOOKS.find(b => b.name === res.book);
+                // Match book by Chinese name OR English name to support AI output variance
+                const book = ALL_BOOKS.find(b => 
+                    b.name === res.book || 
+                    b.englishName === res.book || 
+                    b.englishName.toLowerCase() === res.book.toLowerCase()
+                );
                 if (book) onNavigate(book.id, res.chapter);
               }}
               className="bg-white p-4 rounded-xl shadow-sm border border-bible-accent hover:border-bible-gold hover:shadow-md cursor-pointer transition-all group"
