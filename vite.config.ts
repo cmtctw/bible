@@ -11,9 +11,11 @@ export default defineConfig(({ mode }) => {
     
     plugins: [react()],
     
-    // Polyfill process.env.API_KEY with the VITE_ variable from Vercel Environment Variables
+    // Polyfill process.env.API_KEY
+    // Critical: Use || '' to ensure it is never undefined
+    // Correct usage: Read from env.VITE_API_KEY
     define: {
-      'process.env.API_KEY': JSON.stringify(env.VITE_API_KEY),
+      'process.env.API_KEY': JSON.stringify(env.VITE_API_KEY || ''),
     },
     
     build: {

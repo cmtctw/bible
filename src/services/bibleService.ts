@@ -3,7 +3,9 @@ import { Verse, SearchResult } from "../types";
 import { bibleDb } from "./bibleDb";
 
 // Use process.env.API_KEY exclusively as per guidelines
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Fallback to 'MISSING_KEY' to prevent white screen crash if env var is not set
+const API_KEY = process.env.API_KEY || 'MISSING_KEY';
+const ai = new GoogleGenAI({ apiKey: API_KEY });
 
 // Simple in-memory cache
 const CACHE = new Map<string, Verse[]>();
@@ -19,6 +21,11 @@ async function withRetry<T>(operation: () => Promise<T>, retries = 2, baseDelay 
       // If it's a 429 (Quota Exceeded), do not retry, fail immediately with specific message
       if (error.message?.includes('429') || error.status === 'RESOURCE_EXHAUSTED' || error.message?.includes('quota')) {
         throw new Error("AI 配額已滿 (Quota Exceeded)。請使用「設定」匯入離線聖經檔案，即可完全免費用。");
+      }
+      
+      // Handle missing key error specifically
+      if (API_KEY === 'MISSING_KEY' || error.message?.includes('API key')) {
+         throw new Error("未設定 API Key。請在 Vercel 設定環境變數 VITE_API_KEY。");
       }
 
       console.warn(`Attempt ${i + 1} failed:`, error.message);
