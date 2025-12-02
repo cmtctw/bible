@@ -173,7 +173,7 @@ const ChapterView = ({
   const isQuotaError = error && (error.includes('Quota') || error.includes('配額'));
 
   return (
-    <div className="w-[80%] max-w-7xl mx-auto px-6 py-8 animate-fade-in font-sans">
+    <div className="w-[80%] mx-auto px-6 py-8 animate-fade-in font-sans">
       <div className="flex flex-col md:flex-row items-center justify-between mb-8 border-b border-bible-accent pb-4 gap-4 sticky top-0 bg-[#fdfbf7]/95 backdrop-blur-sm z-10 p-2">
         <h2 className="text-3xl font-bold text-bible-text">{book.name}</h2>
         
@@ -347,7 +347,7 @@ const SearchView = ({
   const isQuotaError = error && (error.includes('Quota') || error.includes('配額'));
 
   return (
-    <div className="w-[80%] max-w-7xl mx-auto px-6 py-8 font-sans">
+    <div className="w-[80%] mx-auto px-6 py-8 font-sans">
       <h2 className="text-2xl font-bold text-bible-text mb-6 flex items-center gap-2">
         <Search className="w-6 h-6 text-bible-gold" />
         搜尋結果："{query}"
@@ -493,7 +493,7 @@ const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => vo
                 <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-bible-paper shrink-0">
                     <h3 className="font-bold text-lg flex items-center gap-2">
                         <Database className="w-5 h-5 text-bible-gold" />
-                        設定
+                        系統設定與診斷
                     </h3>
                     <button onClick={onClose} className="p-1 hover:bg-gray-200 rounded-full"><X size={20} /></button>
                 </div>

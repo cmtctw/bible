@@ -241,7 +241,7 @@ export const searchBible = async (query: string): Promise<SearchResult[]> => {
         model: 'gemini-2.5-flash',
         contents: `Search CUV Bible for: "${query}". Return top 10 most relevant verses.
         Strict JSON format rules:
-        1. "bookId": standard 3-letter lowercase bible book code (e.g. "gen", "exo", "mat", "rev"). THIS IS CRITICAL.
+        1. "bookId": MUST be the standard 3-letter lowercase bible book code (e.g. "gen", "exo", "mat", "rev"). THIS IS CRITICAL.
         2. "bookName": Traditional Chinese Book Name.
         3. "chapter": Integer.
         4. "verse": Integer.
