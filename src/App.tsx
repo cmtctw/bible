@@ -373,32 +373,35 @@ const SearchView = ({
         </div>
       ) : (
         <div className="space-y-4">
-          {results.map((res, idx) => (
+          {results.map((res: any, idx) => (
             <div 
               key={idx} 
               onClick={() => {
-                // Improved logic to match book names more robustly
-                const book = ALL_BOOKS.find(b => 
-                    b.name === res.book || 
-                    b.englishName === res.book || 
-                    b.englishName.toLowerCase() === res.book.toLowerCase() ||
-                    // Handle common variations
-                    b.name.includes(res.book) ||
-                    (res.book.includes('Samuel') && b.englishName.includes('Samuel') && res.book.charAt(0) === b.englishName.charAt(0))
-                );
+                // Priority 1: Use bookId from AI (most reliable)
+                let book = ALL_BOOKS.find(b => b.id === res.bookId);
+
+                // Priority 2: Fallback to name matching if bookId is missing/wrong
+                if (!book) {
+                    book = ALL_BOOKS.find(b => 
+                        b.name === res.bookName || 
+                        b.name === res.book ||
+                        b.englishName === res.book ||
+                        b.id === res.book
+                    );
+                }
                 
                 if (book) {
                     onNavigate(book.id, res.chapter);
                 } else {
-                    console.warn(`Cannot match book name: ${res.book}`);
-                    alert(`找不到書卷: ${res.book}，請確認。`);
+                    console.warn(`Cannot match book: ${res.bookId || res.bookName || res.book}`);
+                    alert(`無法跳轉：找不到書卷 "${res.bookName || res.book}"。`);
                 }
               }}
               className="bg-white p-4 rounded-xl shadow-sm border border-bible-accent hover:border-bible-gold hover:shadow-md cursor-pointer transition-all group"
             >
               <div className="flex items-center justify-between mb-2">
                 <span className="font-bold text-bible-gold">
-                  {res.book} {res.chapter}:{res.verse}
+                  {res.bookName || res.book} {res.chapter}:{res.verse}
                 </span>
                 <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-bible-gold" />
               </div>

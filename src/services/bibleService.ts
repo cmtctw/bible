@@ -25,8 +25,8 @@ async function withRetry<T>(operation: () => Promise<T>, retries = 2, baseDelay 
       }
       
       // Handle missing key error specifically
-      if (API_KEY === 'MISSING_KEY' || error.message?.includes('API key')) {
-         throw new Error("未設定 API Key。請在 Vercel 設定環境變數 VITE_API_KEY。");
+      if (API_KEY === 'MISSING_KEY' || error.message?.includes('API key') || error.message?.includes('400')) {
+         throw new Error("API Key 無效或未設定。請檢查 Vercel 環境變數 VITE_API_KEY 是否正確並已重新部署。");
       }
 
       console.warn(`Attempt ${i + 1} failed:`, error.message);
@@ -97,17 +97,15 @@ function extractJSON(text: string): any {
   }
 
   // 6. Last resort: Regex extraction for verse objects
-  // This ignores the JSON structure and just grabs values
   try {
     const verses: any[] = [];
-    // Regex matches: "verse": 123 (or "123"), "text": "content"
     const regex = /"verse"\s*:\s*"?(\d+)(\.0+)?"?\s*,\s*"text"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
     
     let match;
     while ((match = regex.exec(sanitizedText)) !== null) {
       verses.push({
         verse: parseInt(match[1], 10),
-        text: match[3] // Group 3 is the text content
+        text: match[3]
       });
     }
     
@@ -181,21 +179,6 @@ export const getChapterContent = async (bookNameEng: string, bookNameChi: string
             { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
             { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
           ],
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              verses: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    verse: { type: Type.INTEGER, description: "Verse number (Integer ONLY, no decimals)" },
-                    text: { type: Type.STRING }
-                  }
-                }
-              }
-            }
-          }
         }
       });
 
@@ -253,14 +236,16 @@ export const searchBible = async (query: string): Promise<SearchResult[]> => {
     try {
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: `Search CUV Bible for: "${query}". Return top 10 verses.
+        contents: `Search CUV Bible for: "${query}". Return top 10 most relevant verses.
         Strict JSON format rules:
-        1. "book": Must be the FULL Traditional Chinese name (e.g. "創世記" not "Gen").
-        2. "chapter": Integer.
-        3. "verse": Integer.
-        4. "text": Content string.
+        1. "bookId": standard 3-letter lowercase bible book code (e.g. "gen", "exo", "mat", "rev"). THIS IS IMPORTANT.
+        2. "bookName": Traditional Chinese Book Name.
+        3. "chapter": Integer.
+        4. "verse": Integer.
+        5. "text": Content string.
         
-        Example Output: { "results": [{ "book": "創世記", "chapter": 1, "verse": 1, "text": "起初..." }] }`,
+        Example Output: 
+        { "results": [{ "bookId": "gen", "bookName": "創世記", "chapter": 1, "verse": 1, "text": "起初..." }] }`,
         config: {
           responseMimeType: 'application/json',
           safetySettings: [
@@ -279,7 +264,7 @@ export const searchBible = async (query: string): Promise<SearchResult[]> => {
       if (error.message?.includes('429') || error.status === 'RESOURCE_EXHAUSTED') {
           throw new Error("AI 配額已滿 (Quota Exceeded)。無法進行語意搜尋。");
       }
-      return [];
+      throw error; // Rethrow so UI can show the specific error (e.g. Invalid Key)
     }
   });
 };
