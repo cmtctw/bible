@@ -19,17 +19,30 @@ async function withRetry<T>(operation: () => Promise<T>, retries = 2, baseDelay 
     } catch (error: any) {
       lastError = error;
       
+      const errorMessage = error.message || '';
+      const errorStatus = error.status || '';
+
+      // Handle Expired Key specifically
+      if (errorMessage.includes('expired')) {
+        throw new Error("API Key 已過期 (Expired)。請前往 Google AI Studio 重新申請新的金鑰，並更新設定。");
+      }
+
+      // Handle Leaked/Blocked Key (403)
+      if (errorMessage.includes('leaked') || errorMessage.includes('403') || errorStatus === 'PERMISSION_DENIED') {
+         throw new Error("API Key 已被 Google 封鎖 (偵測到外洩)。請前往 Google AI Studio 重新申請新的金鑰，並更新 Vercel 環境變數。");
+      }
+
       // If it's a 429 (Quota Exceeded), do not retry, fail immediately with specific message
-      if (error.message?.includes('429') || error.status === 'RESOURCE_EXHAUSTED' || error.message?.includes('quota')) {
+      if (errorMessage.includes('429') || errorStatus === 'RESOURCE_EXHAUSTED' || errorMessage.includes('quota')) {
         throw new Error("AI 配額已滿 (Quota Exceeded)。請使用「設定」匯入離線聖經檔案，即可完全免費用。");
       }
       
       // Handle missing key error specifically
-      if (API_KEY === 'MISSING_KEY' || error.message?.includes('API key') || error.message?.includes('400')) {
+      if (API_KEY === 'MISSING_KEY' || errorMessage.includes('API key') || errorMessage.includes('400') || errorStatus === 'INVALID_ARGUMENT') {
          throw new Error("API Key 無效或未設定。請檢查 Vercel 環境變數 VITE_API_KEY 是否正確並已重新部署。");
       }
 
-      console.warn(`Attempt ${i + 1} failed:`, error.message);
+      console.warn(`Attempt ${i + 1} failed:`, errorMessage);
       if (i < retries - 1) {
         await new Promise(resolve => setTimeout(resolve, baseDelay * Math.pow(2, i)));
       }
@@ -203,9 +216,7 @@ export const getChapterContent = async (bookNameEng: string, bookNameChi: string
       throw new Error("AI returned empty verse list");
     } catch (error: any) {
       console.error("AI Generation Error:", error);
-      if (error.message?.includes('429') || error.status === 'RESOURCE_EXHAUSTED') {
-          throw new Error("AI 配額已滿 (Quota Exceeded)。請使用「設定」匯入離線聖經檔案，即可完全免費用。");
-      }
+      // Let withRetry handle specific status codes
       throw error;
     }
   });
@@ -264,10 +275,7 @@ export const searchBible = async (query: string): Promise<SearchResult[]> => {
       return data.results || [];
     } catch (error: any) {
       console.error("Search error:", error);
-      if (error.message?.includes('429') || error.status === 'RESOURCE_EXHAUSTED') {
-          throw new Error("AI 配額已滿 (Quota Exceeded)。無法進行語意搜尋。");
-      }
-      throw error; // Rethrow so UI can show the specific error (e.g. Invalid Key)
+      throw error; // Rethrow to let withRetry handle status codes
     }
   });
 };
@@ -293,7 +301,21 @@ export const diagnoseConnection = async () => {
         status.connection = 'success';
     } catch (e: any) {
         status.connection = 'failed';
-        status.error = e.message || 'Unknown error';
+        const msg = e.message || '';
+        // Pretty print error for UI
+        if (msg.includes('expired')) {
+             status.error = "API Key 已過期 (Expired)。請更換新金鑰。";
+        } else if (msg.includes('leaked')) {
+             status.error = "API Key 已被封鎖 (外洩)。請更換新金鑰。";
+        } else if (e.status === 'PERMISSION_DENIED' || msg.includes('403')) {
+             status.error = "權限被拒 (403)。金鑰可能被封鎖或過期。";
+        } else if (e.status === 'INVALID_ARGUMENT' || msg.includes('400')) {
+             status.error = "API Key 無效 (400)。請檢查設定。";
+        } else if (e.status === 'RESOURCE_EXHAUSTED' || msg.includes('429')) {
+             status.error = "配額已滿 (429)。";
+        } else {
+             status.error = msg || 'Unknown error';
+        }
     }
     return status;
 };
