@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => {
     
     // Polyfill process.env.API_KEY with the VITE_ variable from Vercel Environment Variables
     define: {
-      'process.env.API_KEY': JSON.stringify(env.AIzaSyDiBUBjoTLJVyidBfWUv4JGls7XWsidwn8),
+      'process.env.API_KEY': JSON.stringify(env.VITE_API_KEY),
     },
     
     build: {
