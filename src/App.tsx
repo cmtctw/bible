@@ -324,20 +324,30 @@ const SearchView = ({
 }) => {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const doSearch = async () => {
       if (!query.trim()) return;
       setLoading(true);
+      setError(null);
       try {
         const data = await searchBible(query);
         setResults(data);
+        if (data.length === 0) {
+            // No results found logic
+        }
+      } catch (err: any) {
+         setError(err.message || "搜尋失敗");
       } finally {
         setLoading(false);
       }
     };
     doSearch();
   }, [query]);
+
+  // Detect Quota Error
+  const isQuotaError = error && (error.includes('Quota') || error.includes('配額'));
 
   return (
     <div className="w-[80%] max-w-[1600px] mx-auto px-6 py-8 font-sans">
@@ -351,6 +361,12 @@ const SearchView = ({
           <Loader2 className="w-10 h-10 animate-spin mb-4" />
           <p className="font-medium text-lg">正在搜尋聖經...</p>
         </div>
+      ) : error ? (
+        <div className="flex flex-col items-center justify-center py-20 text-bible-red text-center px-4">
+            <AlertCircle className="w-12 h-12 mb-4" />
+            <p className="font-bold text-xl mb-2">搜尋發生錯誤</p>
+            <p className="text-base opacity-80 mb-6 max-w-md leading-relaxed">{error}</p>
+        </div>
       ) : results.length === 0 ? (
         <div className="text-center py-20 text-gray-500">
           <p>沒有找到相關經文，請嘗試其他關鍵字。</p>
@@ -361,13 +377,22 @@ const SearchView = ({
             <div 
               key={idx} 
               onClick={() => {
-                // Match book by Chinese name OR English name to support AI output variance
+                // Improved logic to match book names more robustly
                 const book = ALL_BOOKS.find(b => 
                     b.name === res.book || 
                     b.englishName === res.book || 
-                    b.englishName.toLowerCase() === res.book.toLowerCase()
+                    b.englishName.toLowerCase() === res.book.toLowerCase() ||
+                    // Handle common variations
+                    b.name.includes(res.book) ||
+                    (res.book.includes('Samuel') && b.englishName.includes('Samuel') && res.book.charAt(0) === b.englishName.charAt(0))
                 );
-                if (book) onNavigate(book.id, res.chapter);
+                
+                if (book) {
+                    onNavigate(book.id, res.chapter);
+                } else {
+                    console.warn(`Cannot match book name: ${res.book}`);
+                    alert(`找不到書卷: ${res.book}，請確認。`);
+                }
               }}
               className="bg-white p-4 rounded-xl shadow-sm border border-bible-accent hover:border-bible-gold hover:shadow-md cursor-pointer transition-all group"
             >

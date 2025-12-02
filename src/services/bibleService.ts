@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { Verse, SearchResult } from "../types";
 import { bibleDb } from "./bibleDb";
@@ -253,7 +254,13 @@ export const searchBible = async (query: string): Promise<SearchResult[]> => {
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: `Search CUV Bible for: "${query}". Return top 10 verses.
-        Strict JSON format: { "results": [{ "book": "BookName (Must be Traditional Chinese, e.g. 創世記)", "chapter": 1, "verse": 1, "text": "Verse content" }] }`,
+        Strict JSON format rules:
+        1. "book": Must be the FULL Traditional Chinese name (e.g. "創世記" not "Gen").
+        2. "chapter": Integer.
+        3. "verse": Integer.
+        4. "text": Content string.
+        
+        Example Output: { "results": [{ "book": "創世記", "chapter": 1, "verse": 1, "text": "起初..." }] }`,
         config: {
           responseMimeType: 'application/json',
           safetySettings: [
