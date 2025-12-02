@@ -1,0 +1,7 @@
+{
+  "name": "GraceVerse Bible (CUV)",
+  "description": "An online Chinese Union Version Bible application featuring an AI-powered conversational voice assistant for scripture study and exploration.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
