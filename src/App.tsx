@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Book as BookIcon, Search, ChevronRight, Menu, X, BookOpen, Loader2, AlertCircle, ChevronLeft, Settings, Upload, Database, CheckCircle, Download, ExternalLink, Save, Github, FileJson, ChevronDown, Grid, Activity, Clock } from 'lucide-react';
 import { ALL_BOOKS, OLD_TESTAMENT, NEW_TESTAMENT } from './constants';
@@ -24,7 +23,7 @@ const Header = ({
   searchQuery: string,
   onOpenSettings: () => void
 }) => (
-  <header className="fixed top-0 left-0 right-0 h-16 bg-bible-paper border-b border-bible-accent flex items-center justify-between px-4 z-40 shadow-sm font-sans">
+  <header className="fixed top-0 left-1/2 -translate-x-1/2 w-[80%] h-16 bg-bible-paper border-b border-x border-bible-accent flex items-center justify-between px-4 z-40 shadow-sm font-sans rounded-b-lg">
     <div className="flex items-center gap-3">
       <button onClick={onMenuToggle} className="lg:hidden p-2 text-bible-text hover:bg-bible-accent/20 rounded-full">
         {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
@@ -69,7 +68,6 @@ const BookList = ({
   onSelectBook: (id: string) => void 
 }) => {
   const [tab, setTab] = useState<'old' | 'new'>('old');
-
   const books = tab === 'old' ? OLD_TESTAMENT : NEW_TESTAMENT;
 
   return (
@@ -123,23 +121,17 @@ const ChapterView = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showGrid, setShowGrid] = useState(false);
-  // Track previous content to enable seamless transition
   const [displayData, setDisplayData] = useState<{verses: Verse[], bookName: string, chapter: number} | null>(null);
-
-  // Close grid when clicking outside
   const gridRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (gridRef.current && !gridRef.current.contains(event.target as Node)) {
         setShowGrid(false);
       }
     };
-    if (showGrid) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    if (showGrid) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showGrid]);
 
   useEffect(() => {
@@ -147,91 +139,40 @@ const ChapterView = ({
       setLoading(true);
       setError(null);
       setShowGrid(false);
-      
       try {
         const data = await getChapterContent(book.englishName, book.name, chapter);
         setVerses(data);
         setDisplayData({ verses: data, bookName: book.name, chapter: chapter });
       } catch (err: any) {
         console.error("Failed to load bible:", err);
-        setError(err.message || '無法載入經文，請確認網路連線。');
+        setError(err.message || '無法載入經文。');
       } finally {
         setLoading(false);
       }
     };
-
     fetchContent();
   }, [book.id, book.name, book.englishName, chapter]);
 
   const allChapters = Array.from({ length: book.chapterCount }, (_, i) => i + 1);
-  
-  // Decide what to show: new data if ready, or old data if loading, or empty if nothing
   const visibleVerses = !loading ? verses : (displayData?.verses || []);
   const isTransitioning = loading && displayData !== null;
-  
-  // Detect Quota Error to show specific action
   const isQuotaError = error && (error.includes('Quota') || error.includes('配額'));
 
   return (
-    <div className="w-[80%] mx-auto px-6 py-8 animate-fade-in font-sans">
+    <div className="w-full max-w-5xl mx-auto px-6 py-8 animate-fade-in font-sans">
       <div className="flex flex-col md:flex-row items-center justify-between mb-8 border-b border-bible-accent pb-4 gap-4 sticky top-0 bg-[#fdfbf7]/95 backdrop-blur-sm z-10 p-2">
         <h2 className="text-3xl font-bold text-bible-text">{book.name}</h2>
-        
-        {/* Chapter Navigator */}
         <div className="relative" ref={gridRef}>
             <div className="flex items-center gap-2 bg-white rounded-lg px-2 py-1 shadow-sm border border-bible-accent">
-                <button 
-                    disabled={chapter <= 1}
-                    onClick={() => onChangeChapter(chapter - 1)}
-                    className="p-2 hover:bg-bible-accent/30 rounded text-bible-text disabled:opacity-30 transition-colors"
-                    title="上一章"
-                >
-                    <ChevronLeft size={20} />
-                </button>
-                
-                <button 
-                    onClick={() => setShowGrid(!showGrid)}
-                    className="flex items-center gap-2 px-4 py-2 hover:bg-bible-accent/30 rounded transition-colors min-w-[140px] justify-center"
-                    title="開啟章節列表"
-                >
-                    <span className="font-bold text-lg">第 {chapter} 章</span>
-                    <ChevronDown size={16} className={`transition-transform duration-200 ${showGrid ? 'rotate-180' : ''}`} />
-                </button>
-
-                <button 
-                    disabled={chapter >= book.chapterCount}
-                    onClick={() => onChangeChapter(chapter + 1)}
-                    className="p-2 hover:bg-bible-accent/30 rounded text-bible-text disabled:opacity-30 transition-colors"
-                    title="下一章"
-                >
-                    <ChevronRight size={20} />
-                </button>
+                <button disabled={chapter <= 1} onClick={() => onChangeChapter(chapter - 1)} className="p-2 hover:bg-bible-accent/30 rounded text-bible-text disabled:opacity-30"><ChevronLeft size={20} /></button>
+                <button onClick={() => setShowGrid(!showGrid)} className="flex items-center gap-2 px-4 py-2 hover:bg-bible-accent/30 rounded min-w-[140px] justify-center"><span className="font-bold text-lg">第 {chapter} 章</span><ChevronDown size={16} /></button>
+                <button disabled={chapter >= book.chapterCount} onClick={() => onChangeChapter(chapter + 1)} className="p-2 hover:bg-bible-accent/30 rounded text-bible-text disabled:opacity-30"><ChevronRight size={20} /></button>
             </div>
-
-            {/* Chapter Grid Dropdown */}
             {showGrid && (
                 <div className="absolute top-full right-0 mt-2 w-[300px] md:w-[400px] max-h-[60vh] overflow-y-auto bg-white shadow-2xl rounded-xl border border-bible-gold/30 p-4 z-50 animate-fade-in-up">
-                    <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-100">
-                        <span className="text-sm font-bold text-gray-500">選擇章節 ({book.chapterCount}章)</span>
-                        <button onClick={() => setShowGrid(false)} className="text-gray-400 hover:text-gray-600"><X size={16}/></button>
-                    </div>
                     <div className="grid grid-cols-5 gap-2">
                         {allChapters.map((c) => (
-                            <button
-                                key={c}
-                                onClick={() => {
-                                    onChangeChapter(c);
-                                    setShowGrid(false);
-                                }}
-                                className={`
-                                    py-2 rounded-lg text-sm font-bold transition-all border
-                                    ${c === chapter 
-                                        ? 'bg-bible-gold text-white border-bible-gold shadow-md scale-105' 
-                                        : 'bg-gray-50 text-gray-700 border-gray-100 hover:bg-bible-accent/30 hover:border-bible-gold/50'}
-                                `}
-                            >
-                                {c}
-                            </button>
+                            <button key={c} onClick={() => { onChangeChapter(c); setShowGrid(false); }} className={`py-2 rounded-lg text-sm font-bold border ${c === chapter ? 'bg-bible-gold text-white' : 'bg-gray-50'}`}>{c}</button>
                         ))}
                     </div>
                 </div>
@@ -239,71 +180,27 @@ const ChapterView = ({
         </div>
       </div>
       
-      {/* Explicit Prev/Next Buttons Above Verses */}
       {!loading && !error && (
         <div className="flex justify-between items-center mb-6 mt-2 px-1">
-            <button
-                disabled={chapter <= 1}
-                onClick={() => onChangeChapter(chapter - 1)}
-                className={`flex items-center gap-1 px-4 py-2 rounded-lg font-bold transition-all border border-transparent hover:border-bible-accent ${
-                    chapter <= 1
-                    ? 'text-gray-300 cursor-not-allowed'
-                    : 'text-bible-gold hover:bg-white hover:text-bible-text hover:shadow-sm'
-                }`}
-            >
-                <ChevronLeft size={20} />
-                上一章
-            </button>
-
-            <button
-                disabled={chapter >= book.chapterCount}
-                onClick={() => onChangeChapter(chapter + 1)}
-                className={`flex items-center gap-1 px-4 py-2 rounded-lg font-bold transition-all border border-transparent hover:border-bible-accent ${
-                    chapter >= book.chapterCount
-                    ? 'text-gray-300 cursor-not-allowed'
-                    : 'text-bible-gold hover:bg-white hover:text-bible-text hover:shadow-sm'
-                }`}
-            >
-                下一章
-                <ChevronRight size={20} />
-            </button>
+            <button disabled={chapter <= 1} onClick={() => onChangeChapter(chapter - 1)} className={`flex items-center gap-1 px-4 py-2 rounded-lg font-bold ${chapter <= 1 ? 'text-gray-300' : 'text-bible-gold hover:bg-white'}`}><ChevronLeft size={20} />上一章</button>
+            <button disabled={chapter >= book.chapterCount} onClick={() => onChangeChapter(chapter + 1)} className={`flex items-center gap-1 px-4 py-2 rounded-lg font-bold ${chapter >= book.chapterCount ? 'text-gray-300' : 'text-bible-gold hover:bg-white'}`}>下一章<ChevronRight size={20} /></button>
         </div>
       )}
 
       {loading && !displayData ? (
-        <div className="flex flex-col items-center justify-center py-20 text-bible-gold">
-          <Loader2 className="w-10 h-10 animate-spin mb-4" />
-          <p className="font-medium text-lg">正在載入經文...</p>
-        </div>
+        <div className="flex flex-col items-center justify-center py-20 text-bible-gold"><Loader2 className="w-10 h-10 animate-spin mb-4" /><p>正在載入經文...</p></div>
       ) : error ? (
-        <div className="flex flex-col items-center justify-center py-20 text-bible-red text-center px-4">
-          <AlertCircle className="w-12 h-12 mb-4" />
-          <p className="font-bold text-xl mb-2">載入失敗</p>
-          <p className="text-base opacity-80 mb-6 max-w-md leading-relaxed break-words">{error}</p>
+        <div className="flex flex-col items-center justify-center py-20 text-bible-red text-center"><AlertCircle className="w-12 h-12 mb-4" /><p className="font-bold text-xl mb-2">載入失敗</p><p className="mb-6">{error}</p>
           <div className="flex gap-4">
-            <button 
-                onClick={() => window.location.reload()} 
-                className="px-6 py-2 bg-bible-accent/20 rounded-lg hover:bg-bible-accent/40 text-bible-text font-medium transition-colors"
-            >
-                重新整理
-            </button>
-            {isQuotaError && (
-                <button 
-                    onClick={onOpenSettings} 
-                    className="px-6 py-2 bg-bible-gold text-white rounded-lg hover:bg-yellow-700 font-bold transition-colors shadow-md"
-                >
-                    前往設定 (匯入離線聖經)
-                </button>
-            )}
+            <button onClick={() => window.location.reload()} className="px-6 py-2 bg-bible-accent/20 rounded">重新整理</button>
+            {isQuotaError && <button onClick={onOpenSettings} className="px-6 py-2 bg-bible-gold text-white rounded">前往設定</button>}
           </div>
         </div>
       ) : (
         <div className={`space-y-4 text-xl leading-loose text-bible-text font-medium transition-opacity duration-300 ${isTransitioning ? 'opacity-50' : 'opacity-100'}`}>
           {visibleVerses.map((v) => (
-            <div key={v.verse} className="group hover:bg-bible-paper/50 rounded p-1 -mx-1 transition-colors relative">
-              <span className="text-xs text-bible-gold absolute -left-6 top-3 opacity-0 group-hover:opacity-100 transition-opacity w-4 text-right select-none">
-                {v.verse}
-              </span>
+            <div key={v.verse} className="group hover:bg-bible-paper/50 rounded p-1 -mx-1 relative">
+              <span className="text-xs text-bible-gold absolute -left-6 top-3 opacity-0 group-hover:opacity-100 w-4 text-right">{v.verse}</span>
               <span className="text-bible-red text-sm align-top opacity-60 group-hover:opacity-100">{v.verse}</span>
               <span> </span>
               <span>{v.text}</span>
@@ -343,66 +240,40 @@ const SearchView = ({
     doSearch();
   }, [query]);
 
-  // Detect Quota Error
-  const isQuotaError = error && (error.includes('Quota') || error.includes('配額'));
-
   return (
-    <div className="w-[80%] mx-auto px-6 py-8 font-sans">
+    <div className="w-full max-w-5xl mx-auto px-6 py-8 font-sans">
       <h2 className="text-2xl font-bold text-bible-text mb-6 flex items-center gap-2">
         <Search className="w-6 h-6 text-bible-gold" />
         搜尋結果："{query}"
+        {!loading && !error && <span className="text-sm font-normal text-gray-500 ml-2">(共 {results.length} 筆)</span>}
       </h2>
 
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-20 text-bible-gold">
-          <Loader2 className="w-10 h-10 animate-spin mb-4" />
-          <p className="font-medium text-lg">正在搜尋聖經...</p>
-        </div>
+        <div className="flex flex-col items-center justify-center py-20 text-bible-gold"><Loader2 className="w-10 h-10 animate-spin mb-4" /><p>正在搜尋...</p></div>
       ) : error ? (
-        <div className="flex flex-col items-center justify-center py-20 text-bible-red text-center px-4">
-            <AlertCircle className="w-12 h-12 mb-4" />
-            <p className="font-bold text-xl mb-2">搜尋發生錯誤</p>
-            <p className="text-base opacity-80 mb-6 max-w-md leading-relaxed break-words">{error}</p>
-        </div>
+        <div className="flex flex-col items-center justify-center py-20 text-bible-red text-center"><AlertCircle className="w-12 h-12 mb-4" /><p className="font-bold">{error}</p></div>
       ) : results.length === 0 ? (
-        <div className="text-center py-20 text-gray-500">
-          <p>沒有找到相關經文，請嘗試其他關鍵字。</p>
-        </div>
+        <div className="text-center py-20 text-gray-500"><p>沒有找到相關經文。</p></div>
       ) : (
         <div className="space-y-4">
           {results.map((res: any, idx) => (
             <div 
               key={idx} 
               onClick={() => {
-                // Priority 1: Use bookId from AI (most reliable)
                 let book = ALL_BOOKS.find(b => b.id === res.bookId);
-
-                // Priority 2: Fallback to name matching if bookId is missing/wrong
-                if (!book) {
-                    book = ALL_BOOKS.find(b => 
-                        b.name === res.bookName || 
-                        b.name === res.book ||
-                        b.englishName === res.book ||
-                        b.id === res.book
-                    );
-                }
+                // Fallback for search results that might lack IDs (though service now provides them)
+                if (!book) book = ALL_BOOKS.find(b => b.name === res.bookName || b.name === res.book || b.id === res.book);
                 
-                if (book) {
-                    onNavigate(book.id, res.chapter);
-                } else {
-                    console.warn(`Cannot match book: ${res.bookId || res.bookName || res.book}`);
-                    alert(`無法跳轉：找不到書卷 "${res.bookName || res.book}"。`);
-                }
+                if (book) onNavigate(book.id, res.chapter);
+                else alert(`無法跳轉：找不到書卷 "${res.bookName || res.book}"`);
               }}
-              className="bg-white p-4 rounded-xl shadow-sm border border-bible-accent hover:border-bible-gold hover:shadow-md cursor-pointer transition-all group"
+              className="bg-white p-4 rounded-xl shadow-sm border border-bible-accent hover:border-bible-gold cursor-pointer transition-all group"
             >
               <div className="flex items-center justify-between mb-2">
-                <span className="font-bold text-bible-gold">
-                  {res.bookName || res.book} {res.chapter}:{res.verse}
-                </span>
+                <span className="font-bold text-bible-gold">{res.bookName || res.book} {res.chapter}:{res.verse}</span>
                 <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-bible-gold" />
               </div>
-              <p className="text-bible-text leading-relaxed font-medium">{res.text}</p>
+              <p className="text-bible-text font-medium leading-relaxed">{res.text}</p>
             </div>
           ))}
         </div>
@@ -417,228 +288,77 @@ const SettingsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => vo
     const [dbCount, setDbCount] = useState(0);
     const [diagResult, setDiagResult] = useState<any>(null);
     const [diagLoading, setDiagLoading] = useState(false);
-    
-    // Build Timestamp for debugging Vercel deployments
     const buildTime = new Date().toLocaleString('zh-TW');
 
-    const refreshCount = async () => {
-        try {
-            const count = await bibleDb.getChapterCount();
-            setDbCount(count);
-        } catch (e) {
-            console.error(e);
-        }
-    };
-
+    const refreshCount = async () => { try { setDbCount(await bibleDb.getChapterCount()); } catch (e) {} };
     const runDiagnosis = async () => {
-        setDiagLoading(true);
-        setDiagResult(null);
-        try {
-            const result = await diagnoseConnection();
-            setDiagResult(result);
-        } catch (e) {
-            setDiagResult({ error: 'Diagnosis failed' });
-        } finally {
-            setDiagLoading(false);
-        }
+        setDiagLoading(true); setDiagResult(null);
+        try { setDiagResult(await diagnoseConnection()); } catch (e) { setDiagResult({ error: 'Diagnosis failed' }); } 
+        finally { setDiagLoading(false); }
     };
 
-    useEffect(() => {
-        if (isOpen) {
-            refreshCount();
-            setImportStatus('idle');
-            setMessage('');
-            setDiagResult(null);
-        }
-    }, [isOpen]);
-
+    useEffect(() => { if (isOpen) { refreshCount(); setImportStatus('idle'); setMessage(''); setDiagResult(null); } }, [isOpen]);
     if (!isOpen) return null;
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        setImportStatus('importing');
-        setMessage('正在讀取檔案...');
-
+        const file = e.target.files?.[0]; if (!file) return;
+        setImportStatus('importing'); setMessage('讀取中...');
         const reader = new FileReader();
         reader.onload = async (event) => {
             try {
                 const json = JSON.parse(event.target?.result as string);
-                setMessage('正在寫入資料庫 (累加模式)，請稍候...');
-                
-                // Allow UI update before heavy processing
                 setTimeout(async () => {
                     try {
                         const count = await bibleDb.importData(json);
-                        setImportStatus('success');
-                        setMessage(`成功匯入 ${count} 章經文！`);
+                        setImportStatus('success'); setMessage(`成功匯入 ${count} 章！`);
                         await refreshCount();
-                    } catch (err: any) {
-                        console.error(err);
-                        setImportStatus('error');
-                        setMessage(err.message || '匯入失敗');
-                    }
+                    } catch (err: any) { setImportStatus('error'); setMessage(err.message); }
                 }, 100);
-
-            } catch (err: any) {
-                console.error(err);
-                setImportStatus('error');
-                setMessage('匯入失敗：JSON 格式錯誤。請確認檔案內容。');
-            }
+            } catch (err) { setImportStatus('error'); setMessage('JSON 格式錯誤'); }
         };
         reader.readAsText(file);
     };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 font-sans">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in-up flex flex-col max-h-[90vh]">
-                <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-bible-paper shrink-0">
-                    <h3 className="font-bold text-lg flex items-center gap-2">
-                        <Database className="w-5 h-5 text-bible-gold" />
-                        系統設定與診斷
-                    </h3>
-                    <button onClick={onClose} className="p-1 hover:bg-gray-200 rounded-full"><X size={20} /></button>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-bible-paper">
+                    <h3 className="font-bold text-lg flex items-center gap-2"><Database className="w-5 h-5 text-bible-gold" />系統設定與診斷</h3>
+                    <button onClick={onClose}><X size={20} /></button>
                 </div>
-                
                 <div className="p-6 overflow-y-auto space-y-8">
-                    
-                    {/* Offline DB Section */}
                     <div>
-                        <h4 className="font-bold text-bible-text mb-4 flex items-center gap-2">
-                             <Database size={18} />
-                             離線資料庫
-                        </h4>
-                        
-                        {/* Status Card */}
-                        <div className="bg-gray-50 rounded-xl p-4 mb-6 border border-gray-100">
-                            <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-bold text-gray-500">資料庫狀態</span>
-                                <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${dbCount > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'}`}>
-                                    {dbCount > 0 ? '已啟用' : '未啟用'}
-                                </span>
-                            </div>
-                            <div className="flex items-end gap-2">
-                                <span className="text-3xl font-bold text-bible-text">{dbCount}</span>
-                                <span className="text-sm text-gray-400 mb-1.5 font-medium">章節</span>
-                            </div>
-                        </div>
-
+                        <h4 className="font-bold text-bible-text mb-4">離線資料庫 ({dbCount} 章)</h4>
                         <div className="space-y-4">
-                            <div>
-                                <p className="text-xs text-gray-500 mb-3 bg-yellow-50 p-2 rounded border border-yellow-100 leading-relaxed font-medium">
-                                    <span className="font-bold text-yellow-700">下載說明：</span> 
-                                    請點擊下方按鈕前往 GitHub，下載 <strong>zh_cuv.json</strong> (和合本)。
-                                </p>
-                                
-                                <a 
-                                    href="https://github.com/thiagobodruk/bible/blob/master/json/zh_cuv.json" 
-                                    target="_blank" 
-                                    rel="noopener noreferrer" 
-                                    className="flex items-center gap-3 p-3 border border-bible-gold bg-bible-paper/30 text-bible-text rounded-lg hover:bg-bible-gold hover:text-white transition-all text-sm font-bold group"
-                                >
-                                    <Github size={20} />
-                                    <span>前往下載 zh_cuv.json</span>
-                                    <ExternalLink size={16} className="ml-auto opacity-50" />
-                                </a>
-                            </div>
-
-                            <div>
-                                <div className={`
-                                    border-2 border-dashed rounded-xl p-6 text-center transition-colors relative
-                                    ${importStatus === 'error' ? 'border-red-300 bg-red-50' : 'border-bible-accent hover:bg-bible-paper/50'}
-                                `}>
-                                    <input 
-                                        type="file" 
-                                        accept=".json" 
-                                        onChange={handleFileUpload}
-                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                        disabled={importStatus === 'importing'}
-                                    />
-                                    <div className="flex flex-col items-center gap-2">
-                                        {importStatus === 'importing' ? (
-                                            <Loader2 className="w-8 h-8 text-bible-gold animate-spin" />
-                                        ) : importStatus === 'success' ? (
-                                            <CheckCircle className="w-8 h-8 text-green-500" />
-                                        ) : importStatus === 'error' ? (
-                                            <AlertCircle className="w-8 h-8 text-red-500" />
-                                        ) : (
-                                            <Upload className="w-8 h-8 text-gray-400" />
-                                        )}
-                                        <span className={`font-bold text-sm ${importStatus === 'error' ? 'text-red-600' : 'text-gray-600'}`}>
-                                            {importStatus === 'importing' ? '匯入中...' : 
-                                            importStatus === 'success' ? '匯入完成' : 
-                                            importStatus === 'error' ? '格式錯誤' :
-                                            '上傳 JSON 檔案'}
-                                        </span>
-                                    </div>
+                            <p className="text-xs text-gray-500 bg-yellow-50 p-2 rounded">請下載 <strong>zh_cuv.json</strong> (和合本)。</p>
+                            <a href="https://github.com/thiagobodruk/bible/blob/master/json/zh_cuv.json" target="_blank" className="flex items-center gap-3 p-3 border border-bible-gold bg-bible-paper/30 rounded-lg text-sm font-bold"><Github size={20} />下載 zh_cuv.json<ExternalLink size={16} className="ml-auto opacity-50" /></a>
+                            <div className={`border-2 border-dashed rounded-xl p-6 text-center relative ${importStatus === 'error' ? 'bg-red-50 border-red-300' : 'border-bible-accent'}`}>
+                                <input type="file" accept=".json" onChange={handleFileUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" disabled={importStatus === 'importing'} />
+                                <div className="flex flex-col items-center gap-2">
+                                    {importStatus === 'importing' ? <Loader2 className="animate-spin text-bible-gold"/> : <Upload className="text-gray-400"/>}
+                                    <span className="font-bold text-sm text-gray-600">{message || '上傳 JSON 檔案'}</span>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    
-                    {/* Diagnostics Section */}
                     <div className="pt-6 border-t border-gray-100">
-                        <h4 className="font-bold text-bible-text mb-4 flex items-center gap-2">
-                             <Activity size={18} />
-                             系統診斷
-                        </h4>
-                        <button 
-                            onClick={runDiagnosis}
-                            disabled={diagLoading}
-                            className="w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-bold transition-colors mb-4 disabled:opacity-50"
-                        >
-                            {diagLoading ? '診斷中...' : '執行連線檢查'}
-                        </button>
-
+                        <h4 className="font-bold text-bible-text mb-4">系統診斷</h4>
+                        <button onClick={runDiagnosis} disabled={diagLoading} className="w-full py-2 bg-gray-100 rounded-lg text-sm font-bold mb-4">{diagLoading ? '診斷中...' : '執行連線檢查'}</button>
                         {diagResult && (
                             <div className="bg-gray-900 text-gray-100 p-3 rounded-lg text-xs font-mono space-y-2">
-                                <div className="flex justify-between">
-                                    <span className="text-gray-400">API Key Configured:</span>
-                                    <span className={diagResult.keyConfigured ? 'text-green-400' : 'text-red-400'}>
-                                        {diagResult.keyConfigured ? 'YES' : 'NO'}
-                                    </span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-400">Key Masked:</span>
-                                    <span className="text-yellow-400">{diagResult.keyMasked}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-400">Connection:</span>
-                                    <span className={diagResult.connection === 'success' ? 'text-green-400' : 'text-red-400'}>
-                                        {diagResult.connection.toUpperCase()}
-                                    </span>
-                                </div>
-                                {diagResult.error && (
-                                    <div className="text-red-300 border-t border-gray-700 pt-2 mt-2 break-all">
-                                        Error: {diagResult.error}
-                                    </div>
-                                )}
+                                <div className="flex justify-between"><span>Key Configured:</span><span className={diagResult.keyConfigured?'text-green-400':'text-red-400'}>{diagResult.keyConfigured?'YES':'NO'}</span></div>
+                                <div className="flex justify-between"><span>Key Masked:</span><span className="text-yellow-400">{diagResult.keyMasked}</span></div>
+                                <div className="flex justify-between"><span>Connection:</span><span className={diagResult.connection==='success'?'text-green-400':'text-red-400'}>{diagResult.connection}</span></div>
+                                {diagResult.error && <div className="text-red-300 mt-2">{diagResult.error}</div>}
                             </div>
                         )}
-                        
-                        {/* Build Time Indicator */}
-                        <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-2 text-[10px] text-gray-400">
-                             <Clock size={10} />
-                             <span>Build Time: {buildTime}</span>
-                        </div>
+                        <div className="mt-4 pt-4 border-t border-gray-100 text-[10px] text-gray-400"><Clock size={10} /> Build: {buildTime}</div>
                     </div>
-                </div>
-
-                <div className="p-4 border-t border-gray-100 flex justify-end shrink-0">
-                    <button 
-                        onClick={onClose}
-                        className="px-6 py-2 bg-bible-text text-white rounded-lg hover:bg-gray-800 transition-colors font-bold text-sm"
-                    >
-                        關閉
-                    </button>
                 </div>
             </div>
         </div>
     );
 };
-
-// -- Main App --
 
 const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -649,16 +369,9 @@ const App: React.FC = () => {
   const [searchInput, setSearchInput] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // Close sidebar on mobile automatically
-  useEffect(() => {
-    if (window.innerWidth < 1024) {
-      setIsSidebarOpen(false);
-    }
-  }, [currentBookId]);
+  useEffect(() => { if (window.innerWidth < 1024) setIsSidebarOpen(false); }, [currentBookId]);
 
-  const currentBook = useMemo(() => 
-    ALL_BOOKS.find(b => b.id === currentBookId) || ALL_BOOKS[0], 
-  [currentBookId]);
+  const currentBook = useMemo(() => ALL_BOOKS.find(b => b.id === currentBookId) || ALL_BOOKS[0], [currentBookId]);
 
   const handleSearchSubmit = () => {
     if (searchInput.trim()) {
@@ -676,58 +389,21 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#fdfbf7] flex flex-col font-sans">
-      <Header 
-        onSearchInput={setSearchInput}
-        onMenuToggle={() => setIsSidebarOpen(!isSidebarOpen)}
-        isMenuOpen={isSidebarOpen}
-        onSearchSubmit={handleSearchSubmit}
-        searchQuery={searchInput}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-      />
-
-      <div className="flex flex-1 pt-16 h-[calc(100vh-64px)] overflow-hidden">
-        {/* Sidebar */}
-        <aside 
-          className={`
-            fixed inset-y-0 left-0 pt-16 lg:static w-64 bg-bible-paper z-30 transition-transform duration-300 shadow-xl lg:shadow-none
-            ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-          `}
-        >
-          <BookList 
-            currentBookId={currentBookId} 
-            onSelectBook={(id) => {
-              setCurrentBookId(id);
-              setCurrentChapter(1);
-              setView('read');
-            }} 
-          />
+      <Header onSearchInput={setSearchInput} onMenuToggle={() => setIsSidebarOpen(!isSidebarOpen)} isMenuOpen={isSidebarOpen} onSearchSubmit={handleSearchSubmit} searchQuery={searchInput} onOpenSettings={() => setIsSettingsOpen(true)} />
+      
+      {/* 
+         Main Container: Width 80% centered 
+         Wrapped to create the 'Boxed' layout effect
+      */}
+      <div className="flex flex-1 pt-16 h-[calc(100vh)] overflow-hidden w-[80%] mx-auto shadow-2xl border-x border-bible-accent bg-bible-paper">
+        <aside className={`fixed inset-y-0 left-0 pt-16 lg:static w-64 bg-bible-paper z-30 transition-transform duration-300 shadow-xl lg:shadow-none border-r border-bible-accent ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+          <BookList currentBookId={currentBookId} onSelectBook={(id) => { setCurrentBookId(id); setCurrentChapter(1); setView('read'); }} />
         </aside>
-
-        {isSidebarOpen && (
-          <div 
-            className="fixed inset-0 bg-black/20 z-20 lg:hidden"
-            onClick={() => setIsSidebarOpen(false)}
-          />
-        )}
-
-        {/* Main Content */}
-        <main className="flex-1 overflow-y-auto relative scroll-smooth">
-          {view === 'read' ? (
-            <ChapterView 
-              book={currentBook} 
-              chapter={currentChapter}
-              onChangeChapter={setCurrentChapter}
-              onOpenSettings={() => setIsSettingsOpen(true)}
-            />
-          ) : (
-            <SearchView 
-              query={searchQuery}
-              onNavigate={handleNavigate}
-            />
-          )}
+        {isSidebarOpen && <div className="fixed inset-0 bg-black/20 z-20 lg:hidden" onClick={() => setIsSidebarOpen(false)} />}
+        <main className="flex-1 overflow-y-auto relative scroll-smooth bg-white/50">
+          {view === 'read' ? <ChapterView book={currentBook} chapter={currentChapter} onChangeChapter={setCurrentChapter} onOpenSettings={() => setIsSettingsOpen(true)} /> : <SearchView query={searchQuery} onNavigate={handleNavigate} />}
         </main>
       </div>
-
       <VoiceAssistant />
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </div>

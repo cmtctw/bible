@@ -1,4 +1,4 @@
-import { Verse } from '../types';
+import { Verse, SearchResult } from '../types';
 import { ALL_BOOKS } from '../constants';
 
 const DB_NAME = 'GraceVerseDB';
@@ -11,12 +11,10 @@ export const bibleDb = {
 
   async init(): Promise<void> {
     if (this.db) return;
-    // If we already determined it's not supported, stop trying.
     if (!this.isSupported) return;
 
     return new Promise((resolve) => {
       try {
-          // Paranoid check: Even accessing window.indexedDB can throw in strict environments
           let idb: IDBFactory | undefined;
           try {
               if (typeof window === 'undefined') {
@@ -39,7 +37,7 @@ export const bibleDb = {
           const request = idb.open(DB_NAME, DB_VERSION);
 
           request.onerror = (event) => {
-            console.warn("IndexedDB open error (likely permission denied):", request.error);
+            console.warn("IndexedDB open error:", request.error);
             this.isSupported = false;
             resolve();
           };
@@ -60,8 +58,7 @@ export const bibleDb = {
             resolve();
           };
       } catch (e) {
-          // This catches synchronous "Access to storage is not allowed" errors
-          console.warn("IndexedDB initialization crashed (Security/Privacy settings):", e);
+          console.warn("IndexedDB initialization crashed:", e);
           this.isSupported = false;
           resolve();
       }
@@ -119,9 +116,66 @@ export const bibleDb = {
     }
   },
 
+  // NEW: Full Text Search implementation
+  async search(query: string): Promise<SearchResult[]> {
+    try {
+        await this.init();
+        if (!this.db || !this.isSupported) return [];
+
+        return new Promise((resolve) => {
+            const results: SearchResult[] = [];
+            try {
+                const transaction = this.db!.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.openCursor();
+
+                request.onsuccess = (event) => {
+                    const cursor = (event.target as IDBRequest).result;
+                    if (cursor) {
+                        // Key format: "BookName-Chapter"
+                        // Value format: Verse[]
+                        const verses = cursor.value as Verse[];
+                        const key = cursor.key as string;
+                        
+                        // Simple parse of the key to get book and chapter
+                        const dashIndex = key.lastIndexOf('-');
+                        const bookName = key.substring(0, dashIndex);
+                        const chapterStr = key.substring(dashIndex + 1);
+                        const chapter = parseInt(chapterStr, 10);
+
+                        // Search within verses
+                        for (const v of verses) {
+                            if (v.text.includes(query)) {
+                                results.push({
+                                    book: bookName,
+                                    chapter: chapter,
+                                    verse: v.verse,
+                                    text: v.text
+                                });
+                            }
+                        }
+                        cursor.continue();
+                    } else {
+                        // Iteration complete
+                        resolve(results);
+                    }
+                };
+
+                request.onerror = () => resolve([]);
+            } catch (e) {
+                console.error("Search transaction failed", e);
+                resolve([]);
+            }
+        });
+    } catch (e) {
+        console.error("Search failed", e);
+        return [];
+    }
+  },
+
   async importData(jsonData: any): Promise<number> {
     await this.init();
-    if (!this.db || !this.isSupported) throw new Error("您的瀏覽器不支援離線資料庫或權限被拒絕 (請嘗試關閉無痕模式)。");
+    if (!this.db || !this.isSupported) throw new Error("您的瀏覽器不支援離線資料庫或權限被拒絕。");
 
     return new Promise((resolve, reject) => {
       let transaction: IDBTransaction;
@@ -145,30 +199,19 @@ export const bibleDb = {
       try {
         let booksToProcess: any[] = [];
 
-        // 1. Detect JSON Structure
         if (Array.isArray(jsonData)) {
           booksToProcess = jsonData;
         } else if (typeof jsonData === 'object' && jsonData !== null) {
-          if (Array.isArray(jsonData.books)) {
-             booksToProcess = jsonData.books;
-          } else if (Array.isArray(jsonData.data)) {
-             booksToProcess = jsonData.data;
-          } else if ((jsonData.name || jsonData.book) && Array.isArray(jsonData.chapters)) {
-             booksToProcess = [jsonData];
-          } else if (typeof jsonData.books === 'object') {
-             booksToProcess = Object.values(jsonData.books);
-          } else {
-             const values = Object.values(jsonData);
-             const likelyBooks = values.filter((v: any) => v && (v.chapters || v.book || v.name));
-             if (likelyBooks.length > 0) {
-                 booksToProcess = likelyBooks;
-             }
-          }
+             // Handle various JSON structures (same as before)
+             if (Array.isArray(jsonData.books)) booksToProcess = jsonData.books;
+             else if (Array.isArray(jsonData.data)) booksToProcess = jsonData.data;
+             else if (jsonData.name && Array.isArray(jsonData.chapters)) booksToProcess = [jsonData];
+             else if (typeof jsonData.books === 'object') booksToProcess = Object.values(jsonData.books);
         }
 
         if (booksToProcess.length === 0) {
             transaction.abort();
-            return reject(new Error("無法識別的 JSON 格式。請確認您下載的是正確的聖經檔案。"));
+            return reject(new Error("無法識別的 JSON 格式。"));
         }
 
         for (const book of booksToProcess) {
@@ -180,71 +223,40 @@ export const bibleDb = {
           const matchedBook = ALL_BOOKS.find(b => 
             b.name === rawName || 
             b.englishName === rawName || 
-            b.englishName.toLowerCase() === rawName.toLowerCase() ||
             b.id === rawName
           );
 
-          if (matchedBook) {
-            targetBookName = matchedBook.name;
-          } else {
-             if (/^[A-Za-z0-9\s]+$/.test(rawName)) {
-                continue; 
-             }
-          }
-
-          if (!book.chapters) continue;
+          if (matchedBook) targetBookName = matchedBook.name;
 
           let chaptersArray: any[] = [];
           if (Array.isArray(book.chapters)) {
               chaptersArray = book.chapters;
           } else if (typeof book.chapters === 'object') {
-              chaptersArray = Object.keys(book.chapters)
-                  .sort((a, b) => parseInt(a) - parseInt(b))
-                  .map(k => book.chapters[k]);
+              chaptersArray = Object.keys(book.chapters).sort((a,b)=>Number(a)-Number(b)).map(k=>book.chapters[k]);
           }
 
           chaptersArray.forEach((chapterContent: any, chapterIdx: number) => {
             let chapterNum = chapterIdx + 1;
             let verseObjects: Verse[] = [];
 
-            if (Array.isArray(chapterContent)) {
-               if (chapterContent.length > 0 && typeof chapterContent[0] === 'string') {
-                    verseObjects = chapterContent.map((text: any, vIdx: number) => ({
-                        verse: vIdx + 1,
-                        text: String(text).replace(/\s+/g, '')
-                    }));
-               }
-            } 
-            else if (typeof chapterContent === 'object' && chapterContent !== null) {
-                if (chapterContent.chapter) {
-                    const parsedNum = parseInt(chapterContent.chapter, 10);
-                    if (!isNaN(parsedNum)) chapterNum = parsedNum;
-                }
+            // Standardize verse extraction
+            if (Array.isArray(chapterContent)) { // ["text", "text"]
+               verseObjects = chapterContent.map((t:any, i:number) => ({ verse: i+1, text: String(t).replace(/\s+/g,'') }));
+            } else if (typeof chapterContent === 'object') { // { "1": "text", "2": "text" } or { verses: [] }
+                if (chapterContent.chapter) chapterNum = Number(chapterContent.chapter);
                 
-                let versesList: any[] = [];
                 if (Array.isArray(chapterContent.verses)) {
-                    versesList = chapterContent.verses;
-                } else if (typeof chapterContent === 'object' && !chapterContent.verses) {
-                     const keys = Object.keys(chapterContent).filter(k => k !== 'chapter' && !isNaN(parseInt(k)));
-                     if (keys.length > 0) {
-                         versesList = keys.sort((a,b) => parseInt(a)-parseInt(b)).map(k => ({
-                             verse: k,
-                             text: chapterContent[k]
-                         }));
-                     }
-                }
-
-                if (versesList.length > 0) {
-                    verseObjects = versesList.map((v: any) => ({
-                        verse: parseInt(v.verse, 10),
-                        text: v.text ? String(v.text).replace(/\s+/g, '') : '' 
-                    }));
+                     verseObjects = chapterContent.verses.map((v:any) => ({ verse: Number(v.verse), text: String(v.text).replace(/\s+/g,'') }));
+                } else {
+                     Object.keys(chapterContent).forEach(k => {
+                         if (!isNaN(Number(k))) verseObjects.push({ verse: Number(k), text: String(chapterContent[k]).replace(/\s+/g,'') });
+                     });
+                     verseObjects.sort((a,b)=>a.verse-b.verse);
                 }
             }
 
             if (verseObjects.length > 0) {
-                const key = `${targetBookName}-${chapterNum}`;
-                store.put(verseObjects, key);
+                store.put(verseObjects, `${targetBookName}-${chapterNum}`);
                 count++;
             }
           });
@@ -252,7 +264,7 @@ export const bibleDb = {
         
         if (count === 0) {
             transaction.abort();
-            return reject(new Error("沒有成功匯入任何章節，請檢查 JSON 檔案內容。"));
+            return reject(new Error("沒有成功匯入任何章節。"));
         }
 
       } catch (e) {
@@ -265,17 +277,7 @@ export const bibleDb = {
   async clear(): Promise<void> {
     await this.init();
     if (!this.db || !this.isSupported) return;
-    
-    return new Promise((resolve, reject) => {
-       try {
-           const transaction = this.db!.transaction([STORE_NAME], 'readwrite');
-           const store = transaction.objectStore(STORE_NAME);
-           const req = store.clear();
-           req.onsuccess = () => resolve();
-           req.onerror = () => reject(req.error);
-       } catch (e) {
-           reject(e);
-       }
-    });
+    const transaction = this.db!.transaction([STORE_NAME], 'readwrite');
+    transaction.objectStore(STORE_NAME).clear();
   }
 };
